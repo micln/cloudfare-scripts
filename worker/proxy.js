@@ -1,7 +1,7 @@
 const index = {
   async fetch(request, env, _ctx) {
     const url = new URL(request.url);
-    
+
     // Handle robots.txt
     if (url.pathname === "/robots.txt") {
       return new Response("User-agent: *\nDisallow: /", { status: 200 });
@@ -28,9 +28,14 @@ const index = {
       });
     }
 
+    // TODO remove leading 'http://' or 'https://'
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      path = path.substring(path.indexOf('://') + 3);
+    }
+
     // Use the same protocol as the original request
     const protocol = url.protocol;
-    
+
     // Construct target URL
     const targetUrl = new URL(`${protocol}//${path}`);
     targetUrl.search = url.search; // Preserve query parameters
@@ -40,12 +45,12 @@ const index = {
 
     // Create new request headers with necessary modifications
     const headers = new Headers();
-    
+
     // 复制原始请求的必要头部，但排除一些特定头部
     for (const [key, value] of request.headers.entries()) {
       // 转换为小写以进行不区分大小写的比较
       const lowercaseKey = key.toLowerCase();
-      
+
       // 跳过这些头部
       if ([
         'referer',
@@ -72,7 +77,7 @@ const index = {
 
     // 设置必要的头部
     headers.set("Host", targetUrl.host);
-    
+
     // 如果是资源请求，设置一个看起来合理的 Referer
     const contentType = request.headers.get('accept');
     if (contentType && !contentType.includes('text/html')) {
@@ -89,7 +94,7 @@ const index = {
 
     try {
       const response = await fetch(newRequest);
-      
+
       // Log non-200 responses
       if (response.status !== 200) {
         console.log({
@@ -105,7 +110,7 @@ const index = {
       }
 
       const newHeaders = new Headers(response.headers);
-      
+
       // Handle redirect location
       if (newHeaders.has("location")) {
         const location = newHeaders.get("location");
@@ -130,12 +135,12 @@ const index = {
       newHeaders.set("access-control-allow-origin", "*");
       newHeaders.set("access-control-allow-methods", "GET, POST, PUT, DELETE, OPTIONS");
       newHeaders.set("access-control-allow-headers", "*");
-      
+
       // Remove security headers that might cause issues
       newHeaders.delete("content-security-policy");
       newHeaders.delete("content-security-policy-report-only");
       newHeaders.delete("clear-site-data");
-      
+
       // Remove any existing CORS restrictions
       newHeaders.delete("access-control-allow-origin-list");
       newHeaders.delete("access-control-allow-credentials");
@@ -146,9 +151,9 @@ const index = {
       // Handle HTML content
       if (response.headers.get("content-type")?.includes("text/html")) {
         let body = await response.text();
-        
+
         const targetHost = targetUrl.host;
-        
+
         // Replace absolute URLs with our proxy URLs
         body = body.replace(
           new RegExp(`https?://${targetHost}/`, 'g'),
@@ -166,7 +171,7 @@ const index = {
           /<base\s+href=["']\//i,
           `<base href="${protocol}//${proxyHost}/${targetHost}/`
         );
-        
+
         return new Response(body, {
           status: response.status,
           headers: newHeaders
